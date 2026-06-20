@@ -2,8 +2,10 @@ import json
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QUrl, Qt
 from PySide6.QtGui import QMovie, QPixmap
+from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
+from PySide6.QtMultimediaWidgets import QVideoWidget
 from PySide6.QtWidgets import QApplication, QLabel, QMainWindow
 
 
@@ -16,6 +18,9 @@ class WallpaperWindow(QMainWindow):
         super().__init__()
 
         self.movie = None
+        self.media_player = None
+        self.audio_output = None
+        self.video_widget = None
 
         self.setWindowTitle("Personal Wallpaper")
         self.setWindowFlags(Qt.FramelessWindowHint)
@@ -45,6 +50,8 @@ class WallpaperWindow(QMainWindow):
             self.load_image(full_path)
         elif wallpaper_type == "gif":
             self.load_gif(full_path)
+        elif wallpaper_type == "video":
+            self.load_video(full_path)
         else:
             self.show_error(f"Tipo no soportado todavia: {wallpaper_type}")
 
@@ -57,6 +64,9 @@ class WallpaperWindow(QMainWindow):
             return json.load(file)
 
     def load_image(self, image_path):
+        self.stop_media()
+        self.ensure_label_view()
+
         pixmap = QPixmap(str(image_path))
 
         if pixmap.isNull():
@@ -70,10 +80,12 @@ class WallpaperWindow(QMainWindow):
             Qt.SmoothTransformation,
         )
 
-        self.movie = None
         self.label.setPixmap(scaled_pixmap)
 
     def load_gif(self, gif_path):
+        self.stop_media()
+        self.ensure_label_view()
+
         movie = QMovie(str(gif_path))
 
         if not movie.isValid():
@@ -88,8 +100,50 @@ class WallpaperWindow(QMainWindow):
         self.movie = movie
         movie.start()
 
-    def show_error(self, message):
+    def load_video(self, video_path):
+        self.stop_media()
+
+        if not video_path.exists():
+            self.show_error(f"No existe el video:\n{video_path}")
+            return
+
+        self.video_widget = QVideoWidget()
+        self.setCentralWidget(self.video_widget)
+
+        self.audio_output = QAudioOutput()
+        self.audio_output.setVolume(0.0)
+
+        self.media_player = QMediaPlayer()
+        self.media_player.setAudioOutput(self.audio_output)
+        self.media_player.setVideoOutput(self.video_widget)
+        self.media_player.setSource(QUrl.fromLocalFile(str(video_path)))
+        self.media_player.mediaStatusChanged.connect(self.handle_media_status)
+        self.media_player.play()
+
+    def handle_media_status(self, status):
+        if status == QMediaPlayer.EndOfMedia and self.media_player is not None:
+            self.media_player.setPosition(0)
+            self.media_player.play()
+
+    def ensure_label_view(self):
+        if self.centralWidget() is not self.label:
+            self.setCentralWidget(self.label)
+
+        self.label.setText("")
+        self.label.setStyleSheet("background-color: black;")
+
+    def stop_media(self):
+        if self.media_player is not None:
+            self.media_player.stop()
+
+        self.media_player = None
+        self.audio_output = None
+        self.video_widget = None
         self.movie = None
+
+    def show_error(self, message):
+        self.stop_media()
+        self.ensure_label_view()
         self.label.setPixmap(QPixmap())
         self.label.setText(message)
         self.label.setStyleSheet(

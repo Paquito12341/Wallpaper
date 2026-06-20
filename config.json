@@ -1,7 +1,7 @@
 {
   "current_wallpaper": {
-    "type": "video",
-    "path": "wallpapers/Video1.mp4"
+    "type": "gif",
+    "path": "wallpapers/animacion.gif"
   },
   "start_with_windows": true
 }

@@ -6,6 +6,7 @@ import win32gui
 from pathlib import Path
 
 from PySide6.QtCore import QTimer, QUrl, Qt
+from PySide6.QtGui import QAction, QColor, QIcon, QPainter, QPixmap
 from PySide6.QtWebEngineCore import QWebEngineSettings
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import (
@@ -17,8 +18,10 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLineEdit,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QPushButton,
+    QSystemTrayIcon,
     QVBoxLayout,
     QWidget,
 )
@@ -30,6 +33,25 @@ RELOAD_SIGNAL_PATH = BASE_DIR / "reload.flag"
 DEBUG = False
 STARTUP_APP_NAME = "PersonalWallpaper"
 STARTUP_REGISTRY_PATH = r"Software\Microsoft\Windows\CurrentVersion\Run"
+
+
+def create_app_icon():
+    pixmap = QPixmap(64, 64)
+    pixmap.fill(Qt.transparent)
+
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.Antialiasing)
+    painter.setBrush(QColor("#00d4ff"))
+    painter.setPen(Qt.NoPen)
+    painter.drawRoundedRect(8, 10, 48, 34, 8, 8)
+    painter.setBrush(QColor("#7c3aed"))
+    painter.drawRect(28, 44, 8, 8)
+    painter.drawRoundedRect(20, 52, 24, 4, 2, 2)
+    painter.setBrush(QColor("#ffffff"))
+    painter.drawEllipse(42, 14, 10, 10)
+    painter.end()
+
+    return QIcon(pixmap)
 
 
 def prepare_desktop_workerw():
@@ -152,10 +174,14 @@ def disable_startup():
 
 
 class ConfigWindow(QWidget):
-    def __init__(self):
+    def __init__(self, wallpaper_window=None, app_icon=None):
         super().__init__()
 
+        self.wallpaper_window = wallpaper_window
+        self.allow_quit = False
         self.setWindowTitle("Wallpaper Settings")
+        if app_icon is not None:
+            self.setWindowIcon(app_icon)
         self.setMinimumWidth(520)
 
         self.config = load_config() or default_config()
@@ -226,11 +252,74 @@ class ConfigWindow(QWidget):
 
         save_config(config)
         sync_startup_setting(config)
+        if self.wallpaper_window is not None:
+            self.wallpaper_window.force_reload_wallpaper()
         QMessageBox.information(
             self,
             "Guardado",
-            "Configuracion guardada. El fondo se actualizara si la app principal esta abierta.",
+            "Configuracion guardada y aplicada.",
         )
+
+    def closeEvent(self, event):
+        if not self.allow_quit:
+            event.ignore()
+            self.hide()
+            return
+
+        if self.wallpaper_window is not None:
+            self.wallpaper_window.close()
+
+        event.accept()
+
+
+class TrayController:
+    def __init__(self, app, settings_window, wallpaper_window, app_icon):
+        self.app = app
+        self.settings_window = settings_window
+        self.wallpaper_window = wallpaper_window
+
+        self.tray_icon = QSystemTrayIcon()
+        self.tray_icon.setIcon(app_icon)
+        self.tray_icon.setToolTip("Wallpaper Settings")
+
+        menu = QMenu()
+
+        open_settings_action = QAction("Abrir settings", menu)
+        open_settings_action.triggered.connect(self.open_settings)
+        menu.addAction(open_settings_action)
+
+        exit_action = QAction("Cerrar wallpaper", menu)
+        exit_action.triggered.connect(self.quit_app)
+        menu.addAction(exit_action)
+
+        self.tray_icon.setContextMenu(menu)
+        self.tray_icon.activated.connect(self.handle_activation)
+        self.tray_icon.show()
+        self.tray_icon.showMessage(
+            "Wallpaper Settings",
+            "Settings queda aqui. Usa este icono para abrirlo o cerrar el wallpaper.",
+            QSystemTrayIcon.MessageIcon.Information,
+            3000,
+        )
+
+    def handle_activation(self, reason):
+        if reason in (
+            QSystemTrayIcon.ActivationReason.Trigger,
+            QSystemTrayIcon.ActivationReason.DoubleClick,
+        ):
+            self.open_settings()
+
+    def open_settings(self):
+        self.settings_window.showNormal()
+        self.settings_window.raise_()
+        self.settings_window.activateWindow()
+
+    def quit_app(self):
+        self.settings_window.allow_quit = True
+        self.tray_icon.hide()
+        self.wallpaper_window.close()
+        self.settings_window.close()
+        self.app.quit()
 
 
 class WallpaperWindow(QMainWindow):
@@ -320,6 +409,14 @@ class WallpaperWindow(QMainWindow):
 
         self.config_mtime = current_mtime
         self.reload_signal_mtime = current_signal_mtime
+        config = self.load_config()
+        sync_startup_setting(config)
+        self.load_wallpaper()
+        self.refresh_desktop_placement()
+
+    def force_reload_wallpaper(self):
+        self.config_mtime = self.get_config_mtime()
+        self.reload_signal_mtime = self.get_reload_signal_mtime()
         config = self.load_config()
         sync_startup_setting(config)
         self.load_wallpaper()
@@ -486,17 +583,23 @@ class WallpaperWindow(QMainWindow):
 def main():
     QApplication.setAttribute(Qt.AA_ShareOpenGLContexts, True)
     app = QApplication(sys.argv)
-
-    settings_args = {"--settings", "--setting", "--config", "--steings"}
-    if any(arg in settings_args for arg in sys.argv[1:]):
-        window = ConfigWindow()
-        window.show()
-        sys.exit(app.exec())
+    app.setQuitOnLastWindowClosed(False)
+    app_icon = create_app_icon()
+    app.setWindowIcon(app_icon)
 
     config = load_config()
     sync_startup_setting(config)
 
-    window = WallpaperWindow()
+    wallpaper_window = WallpaperWindow()
+
+    settings_args = {"--settings", "--setting", "--config", "--steings"}
+    settings_window = ConfigWindow(wallpaper_window, app_icon)
+    app.tray_controller = TrayController(app, settings_window, wallpaper_window, app_icon)
+    if any(arg in settings_args for arg in sys.argv[1:]):
+        settings_window.show()
+    else:
+        settings_window.hide()
+
     sys.exit(app.exec())
 
 

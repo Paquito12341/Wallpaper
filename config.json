@@ -1,7 +1,12 @@
 {
   "current_wallpaper": {
     "type": "gif",
-    "path": "wallpapers/animacion.gif"
+    "path": "wallpapers/Animacion (2).gif"
+  },
+  "windows_theme": {
+    "apply": true,
+    "mode": "dark",
+    "accent_color": "#00d4ff"
   },
   "start_with_windows": true
 }

@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+
+build/
+dist/
+*.spec
+
+reload.flag
+show_settings.flag
+
+wallpapers/*.mp4
+!wallpapers/Video1.mp4

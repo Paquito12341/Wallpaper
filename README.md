@@ -2,7 +2,11 @@
 
 App personal tipo Wallpaper Engine hecha con Python y PySide6. Permite usar imagenes, GIFs, videos y HTML local como fondo animado en Windows.
 
-## Instalar
+## Opcion rapida para quien descarga el repo
+
+1. Instalar Python 3.11 o superior.
+2. Abrir PowerShell en esta carpeta.
+3. Ejecutar:
 
 ```powershell
 python -m venv .venv
@@ -10,7 +14,15 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-## Ejecutar
+4. Abrir la app con doble clic en:
+
+```text
+Open Settings.bat
+```
+
+Ese archivo abre el panel de configuracion. Si existe un EXE compilado en `dist`, lo usa; si no, ejecuta `main.py --settings`.
+
+## Ejecutar manualmente
 
 Abrir fondo y panel de configuracion:
 
@@ -40,10 +52,4 @@ El ejecutable queda en:
 dist\PersonalWallpaper\PersonalWallpaper.exe
 ```
 
-## Abrir Settings en la version compilada
-
-Despues de construir el EXE, usa:
-
-```powershell
-.\Open Settings.bat
-```
+Despues de construir el EXE, `Open Settings.bat` lo abrira automaticamente.
